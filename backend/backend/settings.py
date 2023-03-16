@@ -135,12 +135,3 @@ EXERCISES_COUNT = {
     'normal': [4, 6, 3],
     'hardcore': [4, 10, 4],
 }
-
-MAP_OF_BODY_PARTS = {
-    'neck': 0,
-    'chest': 1,
-    'back': 2,
-    'hips': 3,
-    'knees': 4,
-    'feet': 5,
-}

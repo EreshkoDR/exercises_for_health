@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
 from users.models import User
 
 
@@ -24,6 +25,17 @@ class BodyParts():
         (SHOULDERS, _('Shoulders')), (ELBOWS, _('Elbows')),
         (BRUSHS, _('Brushs'))
     )
+    MAP_OF_BODY_PARTS = {
+        NECK: 0,
+        CHEST: 1,
+        BACK: 2,
+        HIPS: 3,
+        KNEES: 4,
+        FEET: 5,
+        SHOULDERS: 7,
+        ELBOWS: 8,
+        BRUSHS: 9
+    }
 
 
 class Injure(models.Model):

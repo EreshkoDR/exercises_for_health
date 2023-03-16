@@ -3,6 +3,7 @@ import csv
 from django.core.management.base import BaseCommand, CommandError
 
 from exercises.models import BaseExercisesModel
+
 DATA_DIR = 'data/exercises.csv'
 
 

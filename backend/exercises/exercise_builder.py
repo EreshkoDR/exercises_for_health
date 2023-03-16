@@ -1,13 +1,32 @@
+from random import choices
 from typing import List
 
-from backend.settings import EXERCISES_COUNT, MAP_OF_BODY_PARTS
-from users.models import User
-from random import choices
-
+from backend.settings import EXERCISES_COUNT
 from exercises.models import BaseExercisesModel
+from injures.models import BodyParts
+from users.models import User
 
 
 class WorkoutProgramm():
+    """
+    ## Сборщик программы тренировки.
+    Принимает модель пользователя и составляет
+    разминочную, основную и заключительную часть занятия, собирает и кладёт
+    во внутреннюю переменную `__programm`.
+    ### functions
+    - `get_programm()` - возвращает собранный список моделей упражнений
+    -> `List[BaseExercisesModel,]`
+
+    - `get_video()` - возвращает список FieldFile модели упражнений
+    -> `List[FieldFile,]`
+
+    - `refresh_programm()` - пересобирает программу
+    -> `None`
+
+    ### property
+    - `count` - возвращает колличество упражнений в программе занятия
+    -> `int`
+    """
     WARM_UP_LIST = (BaseExercisesModel.WARM_UP,)
     MAIN_PART_LIST = [
         BaseExercisesModel.POWER,
@@ -21,69 +40,102 @@ class WorkoutProgramm():
     WARM_DOWN = 2
 
     def __init__(self, user: User):
-        self.user: User = user
-        self.bmi = user.bmi
-        self.difficulty = self.get_difficulty()
-        self.injures_set = {
+        self.__user: User = user
+        self.__bmi: int = user.bmi
+        self.__difficulty_set: set = self.get_difficulty()
+        self.__injures_set: set = {
             injure.injures.body_part
-            for injure in self.user.personal_injures.all()
+            for injure in self.__user.personal_injures.all()
         }
-        self.body_parts_set: set = self.get_set_of_body_parts(self.injures_set)
-        self.full_set = set.union(self.injures_set, self.body_parts_set)
-        self.queryset_exercises = BaseExercisesModel.objects.filter(
-            body_part__in=self.full_set
+        self.__body_parts_set: set = self.__get_set_of_body_parts(
+            self.__injures_set
         )
-        self.programm = []
+        self.__full_set: set = set.union(
+            self.__injures_set,
+            self.__body_parts_set
+        )
+        self.__queryset_exercises = BaseExercisesModel.objects.filter(
+            body_part__in=self.__full_set
+        )
+        self.__programm: list = []
         self.__main()
 
     def get_difficulty(self) -> set:
         difficulty_dict = {
-            'beginner': ('beginer'),
-            'normal': ('beginner', 'normal'),
-            'hardcore': ('beginner', 'normal', 'hardcore'),
+            BaseExercisesModel.BEGINNER: (
+                BaseExercisesModel.BEGINNER
+            ),
+            BaseExercisesModel.NORMAL: (
+                BaseExercisesModel.NORMAL,
+                BaseExercisesModel.BEGINNER
+            ),
+            BaseExercisesModel.HARDCORE: (
+                BaseExercisesModel.HARDCORE,
+                BaseExercisesModel.NORMAL,
+                BaseExercisesModel.BEGINNER
+            ),
         }
-        return difficulty_dict.get(self.user.difficulty_level)
+        return difficulty_dict.get(self.__user.difficulty_level)
 
-    def get_set_of_body_parts(self, injures) -> set:
+    def __get_set_of_body_parts(self, injures_set: set) -> set:
+        """
+        ### Выборка частей тела / отделов позвоночника
+        Функция принимает сет проблемных участков пользователя и возвращает
+        близлежащие части / отделы (выше и/или ниже).
+        ###### Требуется для соблюдения методологии построения занятия
+        """
         result = set()
         invert_dict = {
             str(value): key
-            for key, value in MAP_OF_BODY_PARTS.items()
+            for key, value in BodyParts.MAP_OF_BODY_PARTS.items()
         }
-        for injure in injures:
-            index = MAP_OF_BODY_PARTS[injure]
+        for injure in injures_set:
+            index = BodyParts.MAP_OF_BODY_PARTS[injure]
             match index:
                 case 0:
                     result.add(invert_dict[str(index + 1)])
+                    # Исключительный случай
+                    result.add(BodyParts.SHOULDERS)
                 case 5:
+                    result.add(invert_dict[str(index - 1)])
+                case 7:
+                    result.add(invert_dict[str(index + 1)])
+                case 9:
                     result.add(invert_dict[str(index - 1)])
                 case _:
                     result.add(invert_dict[str(index + 1)])
                     result.add(invert_dict[str(index - 1)])
         return result
 
-    def get_max_exercises(self, type_of_activity: int) -> int:
-        level = self.user.difficulty_level
+    def __get_max_exercises(self, type_of_activity: int, query_len) -> int:
+        """
+        ### Функция подбора колличества упражнений
+        Зависит от уровня сложности пользователя и типа активности.
+        """
+        level = self.__user.difficulty_level
         match type_of_activity:
             case WorkoutProgramm.WARM_UP:
-                return EXERCISES_COUNT.get(level)[type_of_activity]
+                result = EXERCISES_COUNT.get(level)[type_of_activity]
             case WorkoutProgramm.MAIN_PART:
-                return EXERCISES_COUNT.get(level)[type_of_activity]
+                result = EXERCISES_COUNT.get(level)[type_of_activity] / 2
             case WorkoutProgramm.WARM_DOWN:
-                return EXERCISES_COUNT.get(level)[type_of_activity]
-        return 1
+                result = EXERCISES_COUNT.get(level)[type_of_activity]
+        if result > query_len:
+            return query_len
+        return result
 
-    def warm_up(self) -> List[BaseExercisesModel]:
-        queryset = self.queryset_exercises.filter(
+    def __warm_up(self) -> List[BaseExercisesModel]:
+        queryset = self.__queryset_exercises.filter(
             type_of_activity__in=WorkoutProgramm.WARM_UP_LIST,
-            body_part__in=self.injures_set
+            body_part__in=self.__injures_set
         )
-        count = self.get_max_exercises(WorkoutProgramm.WARM_UP)
-        if count > queryset.count():
-            count = queryset.count()
+        count = self.__get_max_exercises(
+            WorkoutProgramm.WARM_UP,
+            queryset.count()
+        )
         return choices(queryset, k=count)
 
-    def main_part(self) -> List[BaseExercisesModel]:
+    def __main_part(self) -> List[BaseExercisesModel]:
         """
         ### Функция сбора основной части занятия.
         0. Настройка фильтра по упражнениям. При `beginner` выбираются только
@@ -95,32 +147,32 @@ class WorkoutProgramm():
         2. Из результатов запросов выбираются `k / 2` случайных упражнений из
         кажного списка.
         `k = (колличество упражнений в выбранной сложности) / 2`.
+        смотри `get_max_exercises()`
         3. Если колличество упражнений в запросах не равное, выбирается
         наименьший список и на основе его длинны в цикле `for` собирается и
         возвращается итоговый список упражнений, имеющий чередование по типу
-        выполняемого действия: `power`-`stretch`-`power`...`stretch`
+        выполняемого действия: `power | static`-`stretch | mix`
         """
-        if self.difficulty == 'beginner':
-            query_filter = self.body_parts_set
+        if self.__difficulty_set == BaseExercisesModel.BEGINNER:
+            query_filter = self.__body_parts_set
         else:
-            query_filter = self.full_set
-        queryset_power = self.queryset_exercises.filter(
+            query_filter = self.__full_set
+        queryset_power = self.__queryset_exercises.filter(
             type_of_activity__in=WorkoutProgramm.MAIN_PART_LIST[:2],
-            difficulty__in=self.difficulty,
+            difficulty__in=self.__difficulty_set,
             body_part__in=query_filter
         )
-        queryset_stretch = self.queryset_exercises.filter(
+        queryset_stretch = self.__queryset_exercises.filter(
             type_of_activity__in=WorkoutProgramm.MAIN_PART_LIST[2:],
-            difficulty__in=self.difficulty,
+            difficulty__in=self.__difficulty_set,
             body_part__in=query_filter
         )
         exercises = []
-        count = self.get_max_exercises(WorkoutProgramm.MAIN_PART) / 2
-        if count > queryset_power.count():
-            count = queryset_power.count()
+        count = self.__get_max_exercises(
+            WorkoutProgramm.MAIN_PART,
+            queryset_power.count()
+        )
         power = choices(queryset_power, k=int(count))
-        if count > queryset_stretch.count():
-            count = queryset_stretch.count()
         stretch = choices(queryset_stretch, k=int(count))
         if len(stretch) > len(power):
             lenght = len(power)
@@ -133,30 +185,35 @@ class WorkoutProgramm():
             exercises.append(stretch[i])
         return exercises
 
-    def warm_down(self) -> List[BaseExercisesModel]:
-        queryset = self.queryset_exercises.filter(
+    def __warm_down(self) -> List[BaseExercisesModel]:
+        queryset = self.__queryset_exercises.filter(
             type_of_activity__in=WorkoutProgramm.WARM_DOWN_LIST,
-            body_part__in=self.injures_set
+            body_part__in=self.__injures_set
         )
-        count = self.get_max_exercises(WorkoutProgramm.WARM_DOWN)
-        if count > queryset.count():
-            count = queryset.count()
+        count = self.__get_max_exercises(
+            WorkoutProgramm.WARM_DOWN,
+            queryset.count()
+        )
         return choices(queryset, k=count)
 
+    def __main(self):
+        warm_up = self.__warm_up()
+        main_part = self.__main_part()
+        warm_down = self.__warm_down()
+        self.__programm = warm_up + main_part + warm_down
+
     def get_programm(self) -> List[BaseExercisesModel]:
-        return self.programm
+        return self.__programm
 
-    def get_video_list(self) -> list:
-        return [exercise.file for exercise in self.programm]
-
-    def refresh_exercises(self) -> None:
+    def refresh_programm(self) -> None:
         self.__main()
 
-    def __main(self):
-        warm_up = self.warm_up()
-        main_part = self.main_part()
-        warm_down = self.warm_down()
-        self.programm = warm_up + main_part + warm_down
+    def get_video(self) -> List[BaseExercisesModel.file]:
+        return [exercise.file for exercise in self.__programm]
+
+    @property
+    def count(self) -> int:
+        return self.__programm.count()
 
 
 # from users.models import User
