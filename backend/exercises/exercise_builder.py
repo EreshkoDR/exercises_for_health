@@ -124,7 +124,7 @@ class WorkoutProgramm():
             return query_len
         return result
 
-    def __warm_up(self) -> List[BaseExercisesModel]:
+    def get_warm_up_part(self) -> List[BaseExercisesModel]:
         queryset = self.__queryset_exercises.filter(
             type_of_activity__in=WorkoutProgramm.WARM_UP_LIST,
             body_part__in=self.__injures_set
@@ -135,7 +135,7 @@ class WorkoutProgramm():
         )
         return choices(queryset, k=count)
 
-    def __main_part(self) -> List[BaseExercisesModel]:
+    def get_main_part(self) -> List[BaseExercisesModel]:
         """
         ### Функция сбора основной части занятия.
         0. Настройка фильтра по упражнениям. При `beginner` выбираются только
@@ -185,7 +185,7 @@ class WorkoutProgramm():
             exercises.append(stretch[i])
         return exercises
 
-    def __warm_down(self) -> List[BaseExercisesModel]:
+    def get_warm_down(self) -> List[BaseExercisesModel]:
         queryset = self.__queryset_exercises.filter(
             type_of_activity__in=WorkoutProgramm.WARM_DOWN_LIST,
             body_part__in=self.__injures_set
@@ -197,9 +197,9 @@ class WorkoutProgramm():
         return choices(queryset, k=count)
 
     def __main(self):
-        warm_up = self.__warm_up()
-        main_part = self.__main_part()
-        warm_down = self.__warm_down()
+        warm_up = self.get_warm_up_part()
+        main_part = self.get_main_part()
+        warm_down = self.get_warm_down()
         self.__programm = warm_up + main_part + warm_down
 
     def get_programm(self) -> List[BaseExercisesModel]:
